@@ -33,7 +33,11 @@ def describe_pattern(p):
 
 
 FMTR = {
-    'dense': "{url}\t{module}\t{url_name}\t{decorator}",
+    'sho-lab': "{url}\t{module}\t{url_name}\t{decorator}\t{memo}",  # 佐藤追加
+  # 'dense': "{url}\t{module}\t{url_name}\t{decorator}",
+  # 'dense': "{url}\t{module}\t{url_name}\t{decorator}\t{memo}",  # 佐藤修正（佐藤追加）
+  # 'dense': "{url}\t{module}\t{url_name}\t{decorator}",
+    'dense': "{url}\t{module}\t{url_name}\t{memo}\t{decorator}",  # 佐藤再修正（佐藤追加）デコレータよりmemoを先に出力するようにした
     'table': "{url},{module},{url_name},{decorator}",
     'aligned': "{url},{module},{url_name},{decorator}",
     'verbose': "{url}\n\tController: {module}\n\tURL Name: {url_name}\n\tDecorators: {decorator}\n",
@@ -103,7 +107,7 @@ class Command(BaseCommand):
             raise CommandError("Settings module {} does not have the attribute {}.".format(settings, urlconf))
 
         try:
-            urlconf = __import__(getattr(settings, urlconf), {}, {}, [''])
+            urlconf = __import__(getattr(settings, urlconf), {}, {}, [''])  # この時点でurlconf.urlpatternsにsetされている
         except Exception as e:
             if options['traceback']:
                 import traceback
@@ -111,7 +115,9 @@ class Command(BaseCommand):
             raise CommandError("Error occurred while trying to load %s: %s" % (getattr(settings, urlconf), str(e)))
 
         view_functions = self.extract_views_from_urlpatterns(urlconf.urlpatterns)
-        for (func, regex, url_name) in view_functions:
+      # for (func, regex, url_name) in view_functions:
+        for (func, regex, url_name, memo) in view_functions:  # 佐藤追記
+
             if hasattr(func, '__globals__'):
                 func_globals = func.__globals__
             elif hasattr(func, 'func_globals'):
@@ -137,8 +143,10 @@ class Command(BaseCommand):
             module = '{0}.{1}'.format(func.__module__, func_name)
             url_name = url_name or ''
             url = simplify_regex(regex)
-            decorator = ', '.join(decorators)
+            # decorator = ', '.join(decorators)
+            decorator = ','.join(decorators) or ''  # 佐藤修正
 
+            # 出力するデータソース（なはず）の viewsにappendする
             if format_style == 'json':
                 views.append({"url": url, "module": module, "name": url_name, "decorators": decorator})
             else:
@@ -147,6 +155,7 @@ class Command(BaseCommand):
                     url_name=style.URL_NAME(url_name),
                     url=style.URL(url),
                     decorator=decorator,
+                    memo=memo,  # 佐藤追記
                 ).strip())
 
         if not options['unsorted'] and format_style != 'json':
@@ -195,6 +204,11 @@ class Command(BaseCommand):
         """
         views = []
         for p in urlpatterns:
+            if hasattr(p, 'memo'):  # 佐藤追加
+                if p.memo is not None:
+                    # print(p.memo)  # デバッグ用 佐藤追加
+                    # pass
+                    memo = p.memo
             if isinstance(p, (URLPattern, RegexURLPattern)):
                 try:
                     if not p.name:
@@ -204,7 +218,7 @@ class Command(BaseCommand):
                     else:
                         name = p.name
                     pattern = describe_pattern(p)
-                    views.append((p.callback, base + pattern, name))
+                    views.append((p.callback, base + pattern, name, p.memo if p.memo is not None else ''))  # 佐藤追記
                 except ViewDoesNotExist:
                     continue
             elif isinstance(p, (URLResolver, RegexURLResolver)):
